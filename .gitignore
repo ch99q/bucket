@@ -1,0 +1,4 @@
+node_modules/
+*.sqlite
+.bucket-storage/
+.DS_Store
