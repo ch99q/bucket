@@ -550,6 +550,7 @@ Runnable scripts live in `examples/`. Execute any file with `node examples/<name
 - `memory-driver.mjs` - basic in-memory driver usage
 - `live-stream.mjs` - historical + live driver example
 - `session-backtest.mjs` - session clamp/advance walkthrough
+- `backtest-strategy.mjs` - multi-symbol mean-reversion backtest with analytics
 - `buffer.mjs` - shared ring-buffer stream feeding multiple worker threads
 - `storage-memory.mjs` - write-through cache with the memory storage adapter
 - `storage-fs.mjs` - filesystem persistence with the fs storage adapter
