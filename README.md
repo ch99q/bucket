@@ -527,6 +527,8 @@ Runnable scripts live in `examples/`. Execute any file with `node examples/<name
 - `live-stream.mjs` - historical + live driver example
 - `session-backtest.mjs` - session clamp/advance walkthrough
 - `buffer.mjs` - shared ring-buffer stream feeding multiple worker threads
+- `storage-memory.mjs` - write-through cache with the memory storage adapter
+- `storage-fs.mjs` - filesystem persistence with the fs storage adapter
 
 ## Testing
 
