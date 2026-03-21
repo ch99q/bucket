@@ -34,12 +34,12 @@ async function main() {
     { kind: 'candle', supports: { fetch: true }, priority: 1 },
   ]);
 
-  const storage = fsAdapter({
+  await using storage = fsAdapter({
     baseDir: '.bucket-storage',
     namespace: 'fs-example',
   });
 
-  const bucket = createBucket({ drivers: [driver], storage });
+  await using bucket = createBucket({ drivers: [driver], storage });
 
   const query = {
     symbol: 'MSFT',
@@ -53,8 +53,6 @@ async function main() {
   console.log(`Fetched ${candles.length} candles`);
   console.log(`Range: ${candles[0]?.ts} → ${candles.at(-1)?.ts}`);
   console.log(`Stored to .bucket-storage/fs-example/`);
-
-  await bucket.close();
 }
 
 main().catch((err) => {

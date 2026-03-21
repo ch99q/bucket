@@ -49,8 +49,8 @@ async function main() {
     },
   };
 
-  const storage = memoryAdapter();
-  const bucket = createBucket({ drivers: [driver], storage });
+  await using storage = memoryAdapter();
+  await using bucket = createBucket({ drivers: [driver], storage });
 
   const query = {
     symbol: 'AAPL',
@@ -69,8 +69,6 @@ async function main() {
   console.log('Second fetch (same range):');
   const second = await bucket.fetch(query);
   console.log(`  Got ${second.length} candles (driver fetches: ${driverFetchCount})`);
-
-  await bucket.close();
 }
 
 main().catch((err) => {

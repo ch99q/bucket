@@ -2,11 +2,15 @@
 
 High-performance streaming data access layer for trading applications. Designed for HFT systems, backtesting, and real-time market data processing.
 
-## Performance Characteristics
+## Performance
 
-- **3.2M+ records/sec** single-symbol historical streaming
-- **1.1M+ records/sec** merged multi-symbol streaming (5 symbols x 20K records)
-- **<10MB heap delta** while replaying 200K records (steady-state ring buffer)
+Run benchmarks locally to see results for your hardware:
+
+```bash
+npm run bench
+```
+
+Raw results are written to [`benchs/results.json`](benchs/results.json) after each run.
 
 ## Installation
 
@@ -24,8 +28,8 @@ const driver = memoryDriver("test", candleData, [
   { kind: "candle", supports: { fetch: true }, priority: 1 }
 ]);
 
-// Create bucket with optional caching
-const bucket = createBucket({
+// Create bucket with optional caching — auto-closes when scope exits
+await using bucket = createBucket({
   drivers: [driver],
   cache: ttlCache({ ms: 60000 }) // 60-second TTL
 });
@@ -125,12 +129,12 @@ import { createBucket, ttlCache } from '@ch99q/bucket';
 import { tradingViewDriver } from '@ch99q/bucket/driver/tradingview';
 import { fsAdapter } from '@ch99q/bucket/storage/fs';
 
-const storage = fsAdapter({
+await using storage = fsAdapter({
   baseDir: '.bucket-storage',    // defaults to cwd/.bucket-storage
   namespace: 'prod',             // optional multi-tenant isolation
 });
 
-const bucket = createBucket({
+await using bucket = createBucket({
   storage,
   drivers: [tradingViewDriver({ defaultExchange: 'NASDAQ' })],
   cache: ttlCache({ ms: 60_000 }),
@@ -157,15 +161,15 @@ const candles = await bucket.fetch({
 ```ts
 // Memory adapter
 import { memoryAdapter } from '@ch99q/bucket/storage/memory';
-const storage = memoryAdapter();
+await using storage = memoryAdapter();
 
 // Filesystem adapter
 import { fsAdapter } from '@ch99q/bucket/storage/fs';
-const storage = fsAdapter({ baseDir: './.bucket-storage', namespace: 'backtests' });
+await using storage = fsAdapter({ baseDir: './.bucket-storage', namespace: 'backtests' });
 
 // SQLite adapter (auto-detects bun:sqlite or better-sqlite3)
 import { sqliteAdapter } from '@ch99q/bucket/storage/sqlite';
-const storage = sqliteAdapter({ path: './bucket-cache.sqlite' });
+await using storage = sqliteAdapter({ path: './bucket-cache.sqlite' });
 ```
 
 ### Custom Adapters
@@ -192,10 +196,10 @@ const adapter = storageAdapter({
 
 #### `createBucket(options)`
 
-Creates a new bucket instance with configured drivers and caching.
+Creates a new bucket instance with configured drivers and caching. Supports `Symbol.asyncDispose` for automatic cleanup via `await using`.
 
 ```javascript
-const bucket = createBucket({
+await using bucket = createBucket({
   drivers: [driver1, driver2],      // Data source drivers
   cache: ttlCache({ ms: 60000 }),   // Optional: Cache with TTL
   storage: adapter,                 // Optional: Storage adapter
@@ -534,12 +538,6 @@ Runnable scripts live in `examples/`. Execute any file with `node examples/<name
 
 ```bash
 npm test
-```
-
-## Benchmarks
-
-```bash
-npm run bench
 ```
 
 ## License

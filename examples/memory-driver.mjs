@@ -1,8 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Basic memory-driver example that mirrors the structure described in CONVENTIONS.md.
- * The root action (createBucket) builds a bucket category which exposes simple actions
- * such as fetch, stream, and session.
+ * Basic memory-driver example: create a bucket, fetch candles, and auto-close.
  */
 
 import { createBucket, memoryDriver, ttlCache } from '../index.mjs';
@@ -36,7 +34,7 @@ async function main() {
     { kind: 'candle', supports: { fetch: true }, priority: 1 },
   ]);
 
-  const bucket = createBucket({
+  await using bucket = createBucket({
     drivers: [driver],
     cache: ttlCache({ ms: 60_000, max: 256 }),
   });
@@ -51,8 +49,6 @@ async function main() {
 
   console.log(`Fetched ${candles.length} candles`);
   console.log(`Most recent close: ${candles.at(-1)?.close?.toFixed(2)}`);
-
-  await bucket.close();
 }
 
 main().catch((err) => {

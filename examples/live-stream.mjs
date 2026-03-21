@@ -1,8 +1,6 @@
 #!/usr/bin/env bun
 /**
- * Demonstrates how to expose both historical and live data from a custom driver.
- * The bucket returned by createBucket remains the only entry point, keeping the
- * call graph shallow and predictable per CONVENTIONS.md.
+ * Demonstrates historical-to-live streaming with a custom driver.
  */
 import { createBucket, defineDriver } from '../index.mjs';
 
@@ -41,7 +39,7 @@ function liveTickDriver() {
 }
 
 async function main() {
-  const bucket = createBucket({ drivers: [liveTickDriver()] });
+  await using bucket = createBucket({ drivers: [liveTickDriver()] });
 
   let count = 0;
   for await (const tick of bucket.stream({ symbol: 'AAPL', kind: 'tick', from: new Date(Date.now() - 5_000).toISOString() })) {
@@ -49,8 +47,6 @@ async function main() {
     count++;
     if (count >= 10) break;
   }
-
-  await bucket.close();
 }
 
 main().catch((err) => {

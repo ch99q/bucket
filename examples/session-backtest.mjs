@@ -1,8 +1,6 @@
 #!/usr/bin/env bun
 /**
  * Shows how to use sessions to enforce historical consistency in a backtest.
- * Each category (session → fetch/stream/advance) keeps single-word actions to
- * respect the conventions.
  */
 import { createBucket, memoryDriver } from '../index.mjs';
 
@@ -25,7 +23,7 @@ async function main() {
   const driver = memoryDriver('session-demo', seed('MSFT'), [
     { kind: 'candle', supports: { fetch: true }, priority: 1 },
   ]);
-  const bucket = createBucket({ drivers: [driver] });
+  await using bucket = createBucket({ drivers: [driver] });
 
   const session = bucket.session({ asOf: new Date(Date.now() - 6 * 60_000).toISOString(), strict: true });
   const window = await session.fetch({ symbol: 'MSFT', kind: 'candle', interval: '1m' });
@@ -34,8 +32,6 @@ async function main() {
   await session.advance(new Date(Date.now() - 3 * 60_000).toISOString());
   const next = await session.fetch({ symbol: 'MSFT', kind: 'candle', interval: '1m' });
   console.log(`Window size after advance: ${next.length}`);
-
-  await bucket.close();
 }
 
 main().catch((err) => {
