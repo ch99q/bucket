@@ -1,7 +1,7 @@
 {
   "name": "@ch99q/bucket",
   "version": "0.1.0",
-  "description": "High-performance streaming data access layer for trading applications",
+  "description": "High-throughput streaming data access layer for trading applications",
   "type": "module",
   "module": "index.mjs",
   "types": "types.d.ts",
@@ -19,7 +19,7 @@
     "backtesting",
     "candle",
     "ohlcv",
-    "hft"
+    "algo-trading"
   ],
   "exports": {
     ".": {

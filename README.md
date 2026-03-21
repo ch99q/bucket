@@ -1,6 +1,6 @@
 # @ch99q/bucket
 
-High-performance streaming data access layer for trading applications. Designed for HFT systems, backtesting, and real-time market data processing.
+High-throughput streaming data access layer for trading applications. Built for backtesting, algorithmic trading, and real-time market data processing.
 
 ## Performance
 
