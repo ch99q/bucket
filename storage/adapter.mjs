@@ -4,5 +4,8 @@
  * @returns {import('../types').StorageAdapter}
  */
 export function storageAdapter(adapter) {
+  if (adapter.close && !adapter[Symbol.asyncDispose]) {
+    adapter[Symbol.asyncDispose] = () => adapter.close();
+  }
   return adapter;
 }
