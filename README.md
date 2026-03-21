@@ -4,11 +4,31 @@ High-performance streaming data access layer for trading applications. Designed 
 
 ## Performance
 
-Run benchmarks locally to see results for your hardware:
+Results from an Apple M4 Pro (Node via Bun). Run `npm run bench` to reproduce on your hardware.
 
-```bash
-npm run bench
-```
+### Core
+
+| Benchmark | ops/sec | avg |
+|---|--:|--:|
+| Single symbol stream (100k records) | 25.0 | 40ms |
+| Multi-symbol merged stream (5 x 20k) | 10.2 | 98ms |
+| Live ticks (50k) | 18.4 | 54ms |
+| Fetch no cache (10k records) | 242.7 | 4.1ms |
+| Fetch TTL cache hit (10k records) | 214.4 | 4.7ms |
+| Batch fetch (8 symbols x 3 intervals) | 117.1 | 8.5ms |
+| Storage cache hit | 928.7 | 1.1ms |
+| Storage gap fill (sliding window) | 316.9 | 3.2ms |
+| filter + map + take (50k to 25k) | 40.0 | 25ms |
+| Resample 60k 1s to 5m | 38.4 | 26ms |
+| Stream 200k records (memory) | 11.9 | 84ms |
+
+### Storage adapters (write + fetch)
+
+| Adapter | Write 1MB | Fetch 1MB | Write 10MB | Fetch 10MB |
+|---|--:|--:|--:|--:|
+| **fs** | 41ms | 52ms | 243ms | 304ms |
+| **sqlite** | 85ms | 96ms | 492ms | 564ms |
+| **memory** | 33ms | 35ms | 214ms | 231ms |
 
 Raw results are written to [`benchs/results.json`](benchs/results.json) after each run.
 
