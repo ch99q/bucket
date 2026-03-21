@@ -4,33 +4,43 @@ High-throughput streaming data access layer for trading applications. Built for 
 
 ## Performance
 
-Results from an Apple M4 Pro (Node via Bun). Run `npm run bench` to reproduce on your hardware.
+Measured on Apple M4 Pro (Bun). Run `npm run bench` to reproduce.
 
-### Core
+### Throughput
 
-| Benchmark | ops/sec | avg |
+How many records the bucket can process per second across different operations:
+
+| Operation | Records/sec | Latency |
 |---|--:|--:|
-| Single symbol stream (100k records) | 25.0 | 40ms |
-| Multi-symbol merged stream (5 x 20k) | 10.2 | 98ms |
-| Live ticks (50k) | 18.4 | 54ms |
-| Fetch no cache (10k records) | 242.7 | 4.1ms |
-| Fetch TTL cache hit (10k records) | 214.4 | 4.7ms |
-| Batch fetch (8 symbols x 3 intervals) | 117.1 | 8.5ms |
-| Storage cache hit | 928.7 | 1.1ms |
-| Storage gap fill (sliding window) | 316.9 | 3.2ms |
-| filter + map + take (50k to 25k) | 40.0 | 25ms |
-| Resample 60k 1s to 5m | 38.4 | 26ms |
-| Stream 200k records (memory) | 11.9 | 84ms |
+| Stream (single symbol) | **2.5M** | 40ms per 100k |
+| Stream (5 symbols, merged) | **1.0M** | 98ms per 100k |
+| Stream through operators | **2.0M** | 25ms per 50k |
+| Resample 1s → 5m candles | **2.3M** | 26ms per 60k |
+| Live tick ingestion | **920K** | 54ms per 50k |
+| Fetch (no cache) | **2.4M** | 4.1ms per 10k |
 
-### Storage adapters (write + fetch)
+### Fetch latency
 
-| Adapter | Write 1MB | Fetch 1MB | Write 10MB | Fetch 10MB |
+How fast different fetch paths respond:
+
+| Path | Latency | Notes |
+|---|--:|---|
+| TTL cache hit | **4.7ms** | 10k records, in-memory |
+| Storage cache hit | **1.1ms** | Primed memory adapter |
+| Storage gap fill | **3.2ms** | 10 sliding-window fetches |
+| Batch fetch | **8.5ms** | 24 queries (8 symbols × 3 intervals) |
+
+### Storage adapters
+
+Write and read throughput for each adapter:
+
+| Adapter | 1MB write | 1MB read | 10MB write | 10MB read |
 |---|--:|--:|--:|--:|
-| **fs** | 41ms | 52ms | 243ms | 304ms |
-| **sqlite** | 85ms | 96ms | 492ms | 564ms |
-| **memory** | 33ms | 35ms | 214ms | 231ms |
+| **memory** | 30 MB/s | 29 MB/s | 47 MB/s | 43 MB/s |
+| **fs** | 24 MB/s | 19 MB/s | 41 MB/s | 33 MB/s |
+| **sqlite** | 12 MB/s | 10 MB/s | 20 MB/s | 18 MB/s |
 
-Raw results are written to [`benchs/results.json`](benchs/results.json) after each run.
+Raw results in [`benchs/results.json`](benchs/results.json).
 
 ## Installation
 
