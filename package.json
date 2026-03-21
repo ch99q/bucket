@@ -1,0 +1,68 @@
+{
+  "name": "@ch99q/bucket",
+  "version": "0.1.0",
+  "description": "High-performance streaming data access layer for trading applications",
+  "type": "module",
+  "module": "index.mjs",
+  "types": "types.d.ts",
+  "license": "MIT",
+  "author": "ch99q",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ch99q/bucket.git"
+  },
+  "homepage": "https://github.com/ch99q/bucket#readme",
+  "keywords": [
+    "trading",
+    "streaming",
+    "market-data",
+    "backtesting",
+    "candle",
+    "ohlcv",
+    "hft"
+  ],
+  "exports": {
+    ".": {
+      "types": "./types.d.ts",
+      "default": "./index.mjs"
+    },
+    "./driver/memory": {
+      "types": "./drivers/memory.d.ts",
+      "default": "./drivers/memory.mjs"
+    },
+    "./driver/tradingview": {
+      "types": "./drivers/tradingview.d.ts",
+      "default": "./drivers/tradingview.mjs"
+    },
+    "./storage/adapter": {
+      "types": "./storage/adapter.d.ts",
+      "default": "./storage/adapter.mjs"
+    },
+    "./storage/memory": {
+      "types": "./storage/memory.d.ts",
+      "default": "./storage/memory.mjs"
+    },
+    "./storage/fs": {
+      "types": "./storage/fs.d.ts",
+      "default": "./storage/fs.mjs"
+    },
+    "./storage/sqlite": {
+      "types": "./storage/sqlite.d.ts",
+      "default": "./storage/sqlite.mjs"
+    }
+  },
+  "scripts": {
+    "test": "vitest run",
+    "bench": "vitest bench --run",
+    "bench:sqlite": "node scripts/sqlite-bench.mjs"
+  },
+  "dependencies": {
+    "@ch99q/twc": "^0.1.3"
+  },
+  "optionalDependencies": {
+    "better-sqlite3": "^12.4.1"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.4"
+  }
+}
