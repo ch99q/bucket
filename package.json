@@ -52,9 +52,9 @@
     }
   },
   "scripts": {
-    "test": "vitest run",
-    "bench": "vitest bench --run",
-    "bench:sqlite": "node scripts/sqlite-bench.mjs"
+    "test": "bunx vitest run",
+    "bench": "bunx vitest bench --run --outputJson benchs/results.json",
+    "bench:sqlite": "bun scripts/sqlite-bench.mjs"
   },
   "dependencies": {
     "@ch99q/twc": "^0.1.3"
