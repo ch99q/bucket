@@ -1,19 +1,24 @@
-import { describe, bench } from 'vitest';
-import os from 'node:os';
+import { describe, bench, afterAll } from 'vitest';
+import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { mkdtemp, rm, stat } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { randomBytes } from 'node:crypto';
+
 import { fsAdapter } from '../storage/fs.mjs';
 import { sqliteAdapter } from '../storage/sqlite.mjs';
 import { memoryAdapter } from '../storage/memory.mjs';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const tmpBase = path.join(__dirname, '.tmp');
+await mkdir(tmpBase, { recursive: true });
+
 const minute = 60_000;
 const chunkSize = Number(process.env.STORAGE_BENCH_CHUNK ?? 10_000);
-const targetsMB = [50, 500];
+const targetsMB = [1, 10];
 const bytesPerMB = 1024 * 1024;
 
-const makeRecord = (symbol, offset, kind = 'candle') => ({
-  kind,
+const makeRecord = (symbol, offset) => ({
+  kind: 'candle',
   symbol,
   interval: '1m',
   ts: new Date(Date.now() - offset * minute).toISOString(),
@@ -25,66 +30,69 @@ const makeRecord = (symbol, offset, kind = 'candle') => ({
   payload: randomBytes(16).toString('hex'),
 });
 
-const buildBatch = (symbol, start, count) => Array.from({ length: count }, (_, i) => makeRecord(symbol, start + i));
+const buildBatch = (symbol, start, count) =>
+  Array.from({ length: count }, (_, i) => makeRecord(symbol, start + i));
 
-const growDataset = async (adapter, options, targetMB) => {
+const query = { symbol: 'AAPL', kind: 'candle', interval: '1m' };
+
+const growDataset = async (adapter, targetMB) => {
   let written = 0;
   let offset = 0;
-  const query = { symbol: 'AAPL', kind: 'candle', interval: '1m' };
   while (written < targetMB * bytesPerMB) {
     const batch = buildBatch('AAPL', offset, chunkSize);
     offset += chunkSize;
     await adapter.write(batch, { query });
-    if (options.measurePath) {
-      const stats = await stat(options.measurePath());
-      written = stats.size;
-    } else {
-      written += Buffer.byteLength(JSON.stringify(batch));
-    }
+    written += Buffer.byteLength(JSON.stringify(batch));
   }
-  return { query, totalBytes: written };
 };
 
-const adapters = {
-  fs: async () => {
-    const dir = await mkdtemp(path.join(os.tmpdir(), 'storage-bench-fs-'));
-    const adapter = fsAdapter({ baseDir: dir, namespace: 'bench' });
-    return {
-      adapter,
-      options: { measurePath: () => dir },
-      cleanup: () => rm(dir, { recursive: true, force: true }),
-    };
-  },
-  sqlite: async () => {
-    const dir = await mkdtemp(path.join(os.tmpdir(), 'storage-bench-sqlite-'));
-    const dbPath = path.join(dir, 'cache.sqlite');
-    const adapter = sqliteAdapter({ path: dbPath });
-    return {
-      adapter,
-      options: { measurePath: () => dbPath },
-      cleanup: () => rm(dir, { recursive: true, force: true }),
-    };
-  },
-  memory: async () => ({ adapter: memoryAdapter(), options: {}, cleanup: async () => {} }),
+// ── adapter factories ───────────────────────────────────────────────────────
+
+const createFs = async () => {
+  const dir = await mkdtemp(path.join(tmpBase, 'fs-'));
+  return {
+    adapter: fsAdapter({ baseDir: dir, namespace: 'bench' }),
+    cleanup: () => rm(dir, { recursive: true, force: true }),
+  };
 };
 
-describe('storage adapter throughput', () => {
-  for (const [name, factory] of Object.entries(adapters)) {
+const createSqlite = async () => {
+  const dir = await mkdtemp(path.join(tmpBase, 'sqlite-'));
+  const dbPath = path.join(dir, 'cache.sqlite');
+  return {
+    adapter: sqliteAdapter({ path: dbPath }),
+    cleanup: () => rm(dir, { recursive: true, force: true }),
+  };
+};
+
+const createMemory = async () => ({
+  adapter: memoryAdapter(),
+  cleanup: async () => {},
+});
+
+afterAll(async () => {
+  await rm(tmpBase, { recursive: true, force: true });
+});
+
+// ── per-adapter benchmarks ──────────────────────────────────────────────────
+
+for (const [name, factory] of [['fs', createFs], ['sqlite', createSqlite], ['memory', createMemory]]) {
+  describe(`${name} adapter`, () => {
     for (const target of targetsMB) {
-      bench(`${name} write ${target}MB`, async () => {
-        const { adapter, options, cleanup } = await factory();
-        const { query } = await growDataset(adapter, options, target);
+      bench(`write ${target}MB`, async () => {
+        const { adapter, cleanup } = await factory();
+        await growDataset(adapter, target);
         await adapter.close?.();
         await cleanup();
       }, { timeout: 0 });
 
-      bench(`${name} fetch ${target}MB`, async () => {
-        const { adapter, options, cleanup } = await factory();
-        const { query } = await growDataset(adapter, options, target);
+      bench(`fetch ${target}MB`, async () => {
+        const { adapter, cleanup } = await factory();
+        await growDataset(adapter, target);
         await adapter.fetch(query);
         await adapter.close?.();
         await cleanup();
       }, { timeout: 0 });
     }
-  }
-});
+  });
+}
