@@ -159,20 +159,14 @@ export async function* mergeOrdered(iters, opt) {
     const it = iterator[Symbol.asyncIterator]();
     return { it, cur: await it.next() };
   }));
-  const tsOf = (val) => val?.ts ?? val?.record?.ts;
-  const msOf = (val) => {
-    const ts = tsOf(val);
-    if (!ts) return undefined;
-    const parsed = Date.parse(ts);
-    return Number.isNaN(parsed) ? undefined : parsed;
-  };
+  const keyOf = (val) => val?.ts ?? val?.record?.ts ?? '';
   const heap = [];
   const push = (node) => {
     heap.push(node);
     let i = heap.length - 1;
     while (i > 0) {
-      const parent = Math.floor((i - 1) / 2);
-      if (heap[parent].ms <= heap[i].ms) break;
+      const parent = (i - 1) >> 1;
+      if (heap[parent].key <= heap[i].key) break;
       [heap[parent], heap[i]] = [heap[i], heap[parent]];
       i = parent;
     }
@@ -184,12 +178,12 @@ export async function* mergeOrdered(iters, opt) {
     if (heap.length > 0 && last) {
       heap[0] = last;
       let i = 0;
-      while (true) {
-        let left = 2 * i + 1;
-        let right = left + 1;
+      for (;;) {
+        const left = 2 * i + 1;
+        const right = left + 1;
         let smallest = i;
-        if (left < heap.length && heap[left].ms < heap[smallest].ms) smallest = left;
-        if (right < heap.length && heap[right].ms < heap[smallest].ms) smallest = right;
+        if (left < heap.length && heap[left].key < heap[smallest].key) smallest = left;
+        if (right < heap.length && heap[right].key < heap[smallest].key) smallest = right;
         if (smallest === i) break;
         [heap[i], heap[smallest]] = [heap[smallest], heap[i]];
         i = smallest;
@@ -198,12 +192,10 @@ export async function* mergeOrdered(iters, opt) {
     return top;
   };
 
-  states.forEach((state, index) => {
-    if (!state.cur.done) {
-      const ms = msOf(state.cur.value);
-      if (ms !== undefined) push({ index, ms });
-    }
-  });
+  for (let idx = 0; idx < states.length; idx++) {
+    const s = states[idx];
+    if (!s.cur.done) push({ index: idx, key: keyOf(s.cur.value) });
+  }
 
   for (;;) {
     if (opt?.signal?.aborted) throw new BucketError("ABORTED","merge aborted");
@@ -212,10 +204,7 @@ export async function* mergeOrdered(iters, opt) {
     const state = states[next.index];
     yield state.cur.value;
     state.cur = await state.it.next();
-    if (!state.cur.done) {
-      const ms = msOf(state.cur.value);
-      if (ms !== undefined) push({ index: next.index, ms });
-    }
+    if (!state.cur.done) push({ index: next.index, key: keyOf(state.cur.value) });
   }
 }
 
@@ -615,7 +604,7 @@ export function createBucket(opts) {
     ctx.cache?.clear?.(); 
   }
 
-  return { fetch, stream, session, close };
+  return { fetch, stream, session, close, [Symbol.asyncDispose]: close };
 }
 
 // ==================== UTILITY FUNCTIONS ====================
