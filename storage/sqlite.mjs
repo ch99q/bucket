@@ -131,7 +131,10 @@ export function sqliteAdapter(options = {}) {
       const lower = query.from ?? MIN_TS;
       const upper = query.to ?? MAX_TS;
       const rowsRaw = selectStmt.all(key, lower, upper);
-      const rows = rowsRaw.map((row) => JSON.parse(row.payload));
+      const rows = [];
+      for (const row of rowsRaw) {
+        try { rows.push(JSON.parse(row.payload)); } catch {}
+      }
       const coverageRows = selectCoverage.all(key).map((row) => ({ from: row.from_ts ?? undefined, to: row.to_ts ?? undefined }));
       return { rows, missing: normalizeMissing(coverageRows, query) };
     },

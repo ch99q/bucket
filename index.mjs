@@ -79,6 +79,36 @@ function assertQuery(q) {
   if (f !== undefined && t !== undefined && f > t) throw new BucketError("BAD_REQUEST", "from > to");
 }
 
+// ==================== CONCURRENCY CONTROL ====================
+
+/**
+ * Create a semaphore for limiting concurrent operations
+ * Prevents thundering herd when many queries fire simultaneously
+ * @param {number} limit Maximum concurrent operations
+ * @returns {{ acquire(): Promise<() => void> }} Semaphore instance
+ */
+function createSemaphore(limit) {
+  let active = 0;
+  const queue = [];
+  const release = () => {
+    active--;
+    if (queue.length > 0) {
+      active++;
+      const next = queue.shift();
+      next(release);
+    }
+  };
+  return {
+    acquire() {
+      if (active < limit) {
+        active++;
+        return Promise.resolve(release);
+      }
+      return new Promise((resolve) => queue.push(resolve));
+    }
+  };
+}
+
 // ==================== CACHING SYSTEM ====================
 
 /**
@@ -100,14 +130,17 @@ function assertQuery(q) {
 export const ttlCache = ({ ms, max = 512 }) => {
   const map = new Map();
   return {
-    get(k) { 
-      const hit = map.get(k); 
-      if (!hit) return; 
-      if (hit.exp < Date.now()) { 
-        map.delete(k); 
-        return; 
-      } 
-      return hit.v; 
+    get(k) {
+      const hit = map.get(k);
+      if (!hit) return;
+      if (hit.exp < Date.now()) {
+        map.delete(k);
+        return;
+      }
+      // move to end for true LRU ordering
+      map.delete(k);
+      map.set(k, hit);
+      return hit.v;
     },
     set(k, v) { 
       if (map.size >= max) { 
@@ -253,6 +286,25 @@ export const take = (n) => async function* (src) {
   } 
 };
 
+/**
+ * Fused filter + map + take operator — avoids intermediate async generator
+ * overhead for the common `pipe(src, filter(p), map(fn), take(n))` pattern.
+ * @template T, U
+ * @param {(x: T) => boolean} predicate Filter predicate
+ * @param {(x: T) => U} mapFn Transform function
+ * @param {number} limit Maximum number of elements to yield
+ * @returns {Operator<T, U>} Fused operator
+ */
+export const filterMapTake = (predicate, mapFn, limit) => async function* (src) {
+  let i = 0;
+  for await (const x of src) {
+    if (predicate(x)) {
+      yield mapFn(x);
+      if (++i >= limit) break;
+    }
+  }
+};
+
 // ==================== RESAMPLING ====================
 
 /**
@@ -335,6 +387,8 @@ const keyOf = (q, opt, asOf) => {
 export function createBucket(opts) {
   const ctx = { drivers: opts.drivers ?? [], cache: opts.cache, select: opts.select ?? defaultSelect, storage: opts.storage };
   const storageLayer = ctx.storage ? createStorageLayer(ctx.storage) : undefined;
+  const semaphore = createSemaphore(opts.concurrency ?? 16);
+  const inflight = new Map(); // cacheKey -> Promise (stampede protection)
   const selectDrivers = (() => {
     const cache = new Map();
     return (query, need) => {
@@ -391,11 +445,26 @@ export function createBucket(opts) {
       const hit = ctx.cache.get(cacheKey);
       if (hit) return sortMaybe(hit.slice(), opt);
     }
-    const rows = storageLayer
-      ? await storageLayer.readThrough(q, opt, fetchFromDrivers)
-      : await fetchFromDrivers(q, opt);
-    if (cacheKey) ctx.cache.set(cacheKey, rows.slice());
-    return rows;
+    // stampede protection: coalesce concurrent fetches for the same cache key
+    if (cacheKey && inflight.has(cacheKey)) {
+      const rows = await inflight.get(cacheKey);
+      return sortMaybe(rows.slice(), opt);
+    }
+    const fetchPromise = (async () => {
+      const release = await semaphore.acquire();
+      try {
+        const rows = storageLayer
+          ? await storageLayer.readThrough(q, opt, fetchFromDrivers)
+          : await fetchFromDrivers(q, opt);
+        if (cacheKey && Array.isArray(rows)) ctx.cache.set(cacheKey, rows.slice());
+        return rows;
+      } finally {
+        release();
+        if (cacheKey) inflight.delete(cacheKey);
+      }
+    })();
+    if (cacheKey) inflight.set(cacheKey, fetchPromise);
+    return fetchPromise;
   };
 
   async function fetch(arg, opt) {
@@ -449,7 +518,13 @@ export function createBucket(opts) {
       // Future live (from > now)
       if (fromMs > nowMs) {
         const delay = fromMs - nowMs;
-        await new Promise(resolve => setTimeout(resolve, delay));
+        await new Promise((resolve, reject) => {
+          const timer = setTimeout(resolve, delay);
+          if (opt?.signal) {
+            if (opt.signal.aborted) { clearTimeout(timer); reject(new BucketError("ABORTED", "stream aborted")); return; }
+            opt.signal.addEventListener("abort", () => { clearTimeout(timer); reject(new BucketError("ABORTED", "stream aborted")); }, { once: true });
+          }
+        });
         yield* _liveStream(q, opt);
         return;
       }
@@ -668,8 +743,8 @@ const createBatchProcessor = (ctx, selectDrivers) => {
       let batchResults;
       try {
         batchResults = await driver.fetchBatch(pending.map(p => p.query), opt);
-      } catch {
-        batchResults = pending.map(() => []);
+      } catch (err) {
+        throw new BucketError("PROVIDER_FAILED", `fetchBatch failed: ${err.message}`, err);
       }
       pending.forEach((item, idx) => {
         const arr = Array.isArray(batchResults?.[idx]) ? batchResults[idx].slice() : [];
@@ -798,12 +873,14 @@ const createStorageLayer = (adapter) => {
   const flushQueue = [];
   let flushing = false;
 
+  let flushPromise = null;
+
   const enqueueWrite = (rows, ctx) => {
     if (!hasWrite || !rows?.length) return;
     flushQueue.push({ rows, ctx });
     if (flushing) return;
     flushing = true;
-    queueMicrotask(async () => {
+    flushPromise = (async () => {
       while (flushQueue.length) {
         const batch = flushQueue.shift();
         try {
@@ -813,7 +890,8 @@ const createStorageLayer = (adapter) => {
         }
       }
       flushing = false;
-    });
+      flushPromise = null;
+    })();
   };
   const readThrough = async (query, opt, fetcher) => {
     const res = await adapter.fetch(query, opt) ?? { rows: [] };
@@ -859,6 +937,7 @@ const createStorageLayer = (adapter) => {
   };
 
   const close = async () => {
+    if (flushPromise) await flushPromise;
     await adapter.close?.();
   };
 

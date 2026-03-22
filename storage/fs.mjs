@@ -155,7 +155,7 @@ export function fsAdapter(options = {}) {
             if (matchesQuery(record, query)) rows.push(record);
           }
         } catch (err) {
-          if (err.code !== 'ENOENT') throw err;
+          if (err.code !== 'ENOENT' && !(err instanceof SyntaxError)) throw err;
         }
       }
       rows.sort((a, b) => Date.parse(a.ts) - Date.parse(b.ts));

@@ -98,7 +98,7 @@ const mergeRecords = (base, addition) => {
       merged.push(r);
       j++;
     } else {
-      merged.push(recordKey(r) === recordKey(l) ? r : r);
+      merged.push(recordKey(r) === recordKey(l) ? r : l);
       i++;
       j++;
     }
